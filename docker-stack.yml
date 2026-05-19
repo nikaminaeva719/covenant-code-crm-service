@@ -7,6 +7,8 @@
 services:
   postgres:
     image: postgres:16-alpine
+    ports:
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -35,6 +37,8 @@ services:
 
   crm-service:
     image: ${REGISTRY}/crm-service:${IMAGE_TAG:-latest}
+    ports:
+      - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DB_HOST: postgres
@@ -54,11 +58,14 @@ services:
       update_config:
         parallelism: 1
         delay: 10s
-        order: rolling-update
+        order: start-first
         failure_action: rollback
+        monitor: 120s
       rollback_config:
         parallelism: 1
         delay: 5s
+        order: start-first
+        failure_action: pause
       restart_policy:
         condition: on-failure
         delay: 5s
