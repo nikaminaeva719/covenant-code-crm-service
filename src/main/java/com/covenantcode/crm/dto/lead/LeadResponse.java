@@ -37,6 +37,8 @@ public class LeadResponse {
 
     private Long convertedStudentId;
 
+    private Long commentsCount;
+
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdAt;
 

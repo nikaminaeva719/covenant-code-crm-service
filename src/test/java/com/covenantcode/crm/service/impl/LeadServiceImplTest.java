@@ -28,182 +28,216 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class LeadServiceImplTest {
 
-        @Mock
-        private LeadRepository leadRepository;
+    @Mock
+    private LeadRepository leadRepository;
 
-        @Mock
-        private CourseRepository courseRepository;
+    @Mock
+    private CourseRepository courseRepository;
 
-        @Mock
-        private UserRepository userRepository;
+    @Mock
+    private UserRepository userRepository;
 
-        @Mock
-        private LeadMapper leadMapper;
+    @Mock
+    private LeadMapper leadMapper;
 
-        @InjectMocks
-        private LeadServiceImpl leadService;
+    @InjectMocks
+    private LeadServiceImpl leadService;
 
-        private LeadCreateRequest fullRequest;
-        private LeadCreateRequest minimalRequest;
-        private Course course;
-        private User manager;
-        private Lead savedLead;
-        private LeadResponse expectedResponse;
+    private LeadCreateRequest fullRequest;
+    private LeadCreateRequest minimalRequest;
+    private Course course;
+    private User manager;
+    private Lead savedLead;
+    private LeadResponse expectedResponse;
 
-        @BeforeEach
-        void setUp() {
-            course = new Course();
-            course.setId(1L);
-            course.setTitle("Test Course");
+    private Lead lead;
+    private LeadResponse leadResponse;
 
-            manager = new User();
-            manager.setId(2L);
-            manager.setFirstName("Anna");
-            manager.setLastName("Smith");
+    @BeforeEach
+    void setUp() {
+        course = new Course();
+        course.setId(1L);
+        course.setTitle("Test Course");
 
-            fullRequest = new LeadCreateRequest();
-            fullRequest.setFirstName("Ivan");
-            fullRequest.setLastName("Petrov");
-            fullRequest.setPhone("+79001234567");
-            fullRequest.setEmail("ivan@example.com");
-            fullRequest.setSource("website");
-            fullRequest.setInterestedCourseId(1L);
-            fullRequest.setAssignedManagerId(2L);
-            fullRequest.setComment("Test comment");
+        manager = new User();
+        manager.setId(2L);
+        manager.setFirstName("Anna");
+        manager.setLastName("Smith");
 
-            minimalRequest = new LeadCreateRequest();
-            minimalRequest.setFirstName("John");
-            minimalRequest.setPhone("+79998887766");
+        fullRequest = new LeadCreateRequest();
+        fullRequest.setFirstName("Ivan");
+        fullRequest.setLastName("Petrov");
+        fullRequest.setPhone("+79001234567");
+        fullRequest.setEmail("ivan@example.com");
+        fullRequest.setSource("website");
+        fullRequest.setInterestedCourseId(1L);
+        fullRequest.setAssignedManagerId(2L);
+        fullRequest.setComment("Test comment");
 
-            savedLead = new Lead();
-            savedLead.setId(1L);
-            savedLead.setFirstName(fullRequest.getFirstName());
-            savedLead.setLastName(fullRequest.getLastName());
-            savedLead.setPhone(fullRequest.getPhone());
-            savedLead.setEmail(fullRequest.getEmail());
-            savedLead.setSource(fullRequest.getSource());
-            savedLead.setComment(fullRequest.getComment());
-            savedLead.setInterestedCourse(course);
-            savedLead.setAssignedManager(manager);
-            savedLead.setStatus(LeadStatus.NEW);
+        minimalRequest = new LeadCreateRequest();
+        minimalRequest.setFirstName("John");
+        minimalRequest.setPhone("+79998887766");
 
-            expectedResponse = new LeadResponse();
-            expectedResponse.setId(1L);
-            expectedResponse.setFirstName(fullRequest.getFirstName());
-            expectedResponse.setLastName(fullRequest.getLastName());
-            expectedResponse.setPhone(fullRequest.getPhone());
-            expectedResponse.setEmail(fullRequest.getEmail());
-            expectedResponse.setSource(fullRequest.getSource());
-            expectedResponse.setComment(fullRequest.getComment());
-            expectedResponse.setStatus(LeadStatus.NEW.name());
-            expectedResponse.setCreatedAt(LocalDateTime.now());
-            expectedResponse.setUpdatedAt(LocalDateTime.now());
+        savedLead = new Lead();
+        savedLead.setId(1L);
+        savedLead.setFirstName(fullRequest.getFirstName());
+        savedLead.setLastName(fullRequest.getLastName());
+        savedLead.setPhone(fullRequest.getPhone());
+        savedLead.setEmail(fullRequest.getEmail());
+        savedLead.setSource(fullRequest.getSource());
+        savedLead.setComment(fullRequest.getComment());
+        savedLead.setInterestedCourse(course);
+        savedLead.setAssignedManager(manager);
+        savedLead.setStatus(LeadStatus.NEW);
 
-            CourseShortResponse courseShort = new CourseShortResponse();
-            courseShort.setId(1L);
-            courseShort.setTitle("Test Course");
-            expectedResponse.setInterestedCourse(courseShort);
+        expectedResponse = new LeadResponse();
+        expectedResponse.setId(1L);
+        expectedResponse.setFirstName(fullRequest.getFirstName());
+        expectedResponse.setLastName(fullRequest.getLastName());
+        expectedResponse.setPhone(fullRequest.getPhone());
+        expectedResponse.setEmail(fullRequest.getEmail());
+        expectedResponse.setSource(fullRequest.getSource());
+        expectedResponse.setComment(fullRequest.getComment());
+        expectedResponse.setStatus(LeadStatus.NEW.name());
+        expectedResponse.setCreatedAt(LocalDateTime.now());
+        expectedResponse.setUpdatedAt(LocalDateTime.now());
 
-            UserShortResponse userShort = new UserShortResponse();
-            userShort.setId(2L);
-            userShort.setFirstName("Anna");
-            userShort.setLastName("Smith");
-            expectedResponse.setAssignedManager(userShort);
-        }
+        CourseShortResponse courseShort = new CourseShortResponse();
+        courseShort.setId(1L);
+        courseShort.setTitle("Test Course");
+        expectedResponse.setInterestedCourse(courseShort);
+
+        UserShortResponse userShort = new UserShortResponse();
+        userShort.setId(2L);
+        userShort.setFirstName("Anna");
+        userShort.setLastName("Smith");
+        expectedResponse.setAssignedManager(userShort);
+
+        lead = new Lead();
+        lead.setId(1L);
+
+        leadResponse = new LeadResponse();
+        leadResponse.setId(1L);
+    }
 
 
-@Test
-@DisplayName("Создание лида с заполненными полями (курс и менеджер)")
-void createLead_withAllFields_shouldReturnLeadResponse() {
+    @Test
+    @DisplayName("Создание лида с заполненными полями (курс и менеджер)")
+    void createLead_withAllFields_shouldReturnLeadResponse() {
 
-    when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
-    when(userRepository.findById(2L)).thenReturn(Optional.of(manager));
-    when(leadRepository.save(any(Lead.class))).thenReturn(savedLead);
+        when(courseRepository.findById(1L)).thenReturn(Optional.of(course));
+        when(userRepository.findById(2L)).thenReturn(Optional.of(manager));
+        when(leadRepository.save(any(Lead.class))).thenReturn(savedLead);
 
-    when(leadMapper.toResponse(any(Lead.class))).thenReturn(expectedResponse);
+        when(leadMapper.toResponse(any(Lead.class))).thenReturn(expectedResponse);
 
-    LeadResponse response = leadService.create(fullRequest);
+        LeadResponse response = leadService.create(fullRequest);
 
-    assertThat(response).isNotNull();
-    assertThat(response.getId()).isEqualTo(1L);
-    assertThat(response.getStatus()).isEqualTo("NEW");
-    assertThat(response.getInterestedCourse()).isNotNull();
-    assertThat(response.getInterestedCourse().getId()).isEqualTo(1L);
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getStatus()).isEqualTo("NEW");
+        assertThat(response.getInterestedCourse()).isNotNull();
+        assertThat(response.getInterestedCourse().getId()).isEqualTo(1L);
 
-    verify(courseRepository).findById(1L);
-    verify(userRepository).findById(2L);
-    verify(leadRepository).save(any(Lead.class));
-    verify(leadMapper).toResponse(any(Lead.class));
+        verify(courseRepository).findById(1L);
+        verify(userRepository).findById(2L);
+        verify(leadRepository).save(any(Lead.class));
+        verify(leadMapper).toResponse(any(Lead.class));
 
-    ArgumentCaptor<Lead> leadCaptor = ArgumentCaptor.forClass(Lead.class);
-    verify(leadRepository).save(leadCaptor.capture());
-    Lead capturedLead = leadCaptor.getValue();
-    assertThat(capturedLead.getStatus()).isEqualTo(LeadStatus.NEW);
-    assertThat(capturedLead.getInterestedCourse()).isEqualTo(course);
-    assertThat(capturedLead.getAssignedManager()).isEqualTo(manager);
-}
-@Test
-@DisplayName("Создание лида только с обязательными полями (минимум)")
-void createLead_withMinimalFields_shouldReturnLeadResponse() {
+        ArgumentCaptor<Lead> leadCaptor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository).save(leadCaptor.capture());
+        Lead capturedLead = leadCaptor.getValue();
+        assertThat(capturedLead.getStatus()).isEqualTo(LeadStatus.NEW);
+        assertThat(capturedLead.getInterestedCourse()).isEqualTo(course);
+        assertThat(capturedLead.getAssignedManager()).isEqualTo(manager);
+    }
 
-    Lead minimalSavedLead = new Lead();
-    minimalSavedLead.setId(2L);
-    minimalSavedLead.setFirstName(minimalRequest.getFirstName());
-    minimalSavedLead.setPhone(minimalRequest.getPhone());
-    minimalSavedLead.setStatus(LeadStatus.NEW);
+    @Test
+    @DisplayName("Создание лида только с обязательными полями (минимум)")
+    void createLead_withMinimalFields_shouldReturnLeadResponse() {
 
-    LeadResponse minimalResponse = new LeadResponse();
-    minimalResponse.setId(2L);
-    minimalResponse.setFirstName(minimalRequest.getFirstName());
-    minimalResponse.setPhone(minimalRequest.getPhone());
-    minimalResponse.setStatus("NEW");
-    minimalResponse.setInterestedCourse(null);
-    minimalResponse.setAssignedManager(null);
+        Lead minimalSavedLead = new Lead();
+        minimalSavedLead.setId(2L);
+        minimalSavedLead.setFirstName(minimalRequest.getFirstName());
+        minimalSavedLead.setPhone(minimalRequest.getPhone());
+        minimalSavedLead.setStatus(LeadStatus.NEW);
 
-    when(leadRepository.save(any(Lead.class))).thenReturn(minimalSavedLead);
-    when(leadMapper.toResponse(any(Lead.class))).thenReturn(minimalResponse);
+        LeadResponse minimalResponse = new LeadResponse();
+        minimalResponse.setId(2L);
+        minimalResponse.setFirstName(minimalRequest.getFirstName());
+        minimalResponse.setPhone(minimalRequest.getPhone());
+        minimalResponse.setStatus("NEW");
+        minimalResponse.setInterestedCourse(null);
+        minimalResponse.setAssignedManager(null);
 
-    LeadResponse response = leadService.create(minimalRequest);
+        when(leadRepository.save(any(Lead.class))).thenReturn(minimalSavedLead);
+        when(leadMapper.toResponse(any(Lead.class))).thenReturn(minimalResponse);
 
-    assertThat(response).isNotNull();
-    assertThat(response.getId()).isEqualTo(2L);
-    assertThat(response.getStatus()).isEqualTo("NEW");
-    assertThat(response.getInterestedCourse()).isNull();
-    assertThat(response.getAssignedManager()).isNull();
+        LeadResponse response = leadService.create(minimalRequest);
 
-    verify(courseRepository, never()).findById(any());
-    verify(userRepository, never()).findById(any());
-    verify(leadRepository).save(any(Lead.class));
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(2L);
+        assertThat(response.getStatus()).isEqualTo("NEW");
+        assertThat(response.getInterestedCourse()).isNull();
+        assertThat(response.getAssignedManager()).isNull();
 
-    ArgumentCaptor<Lead> leadCaptor = ArgumentCaptor.forClass(Lead.class);
-    verify(leadRepository).save(leadCaptor.capture());
-    Lead captured = leadCaptor.getValue();
-    assertThat(captured.getStatus()).isEqualTo(LeadStatus.NEW);
-    assertThat(captured.getInterestedCourse()).isNull();
-    assertThat(captured.getAssignedManager()).isNull();
-}
-@Test
-@DisplayName("Передан несуществующий курс – выбрасывается ResourceNotFoundException")
-void createLead_withInvalidCourseId_shouldThrowResourceNotFoundException() {
+        verify(courseRepository, never()).findById(any());
+        verify(userRepository, never()).findById(any());
+        verify(leadRepository).save(any(Lead.class));
 
-    Long invalidCourseId = 99L;
-    fullRequest.setInterestedCourseId(invalidCourseId);
-    fullRequest.setAssignedManagerId(2L);
+        ArgumentCaptor<Lead> leadCaptor = ArgumentCaptor.forClass(Lead.class);
+        verify(leadRepository).save(leadCaptor.capture());
+        Lead captured = leadCaptor.getValue();
+        assertThat(captured.getStatus()).isEqualTo(LeadStatus.NEW);
+        assertThat(captured.getInterestedCourse()).isNull();
+        assertThat(captured.getAssignedManager()).isNull();
+    }
 
-    when(courseRepository.findById(invalidCourseId)).thenReturn(Optional.empty());
+    @Test
+    @DisplayName("Передан несуществующий курс – выбрасывается ResourceNotFoundException")
+    void createLead_withInvalidCourseId_shouldThrowResourceNotFoundException() {
 
-    assertThatThrownBy(() -> leadService.create(fullRequest))
-            .isInstanceOf(ResourceNotFoundException.class)
-            .hasMessageContaining("Course")
-            .hasMessageContaining(String.valueOf(invalidCourseId));
+        Long invalidCourseId = 99L;
+        fullRequest.setInterestedCourseId(invalidCourseId);
+        fullRequest.setAssignedManagerId(2L);
 
-    verify(courseRepository).findById(invalidCourseId);
-    verify(userRepository, never()).findById(anyLong());
-    verify(leadRepository, never()).save(any(Lead.class));
-}
+        when(courseRepository.findById(invalidCourseId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> leadService.create(fullRequest))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Course")
+                .hasMessageContaining(String.valueOf(invalidCourseId));
+
+        verify(courseRepository).findById(invalidCourseId);
+        verify(userRepository, never()).findById(anyLong());
+        verify(leadRepository, never()).save(any(Lead.class));
+    }
+
+    @Test
+    void getById_whenLeadFound_thenReturnsLeadResponse() {
+        when(leadRepository.findById(1L)).thenReturn(Optional.of(lead));
+        when(leadMapper.toResponse(lead)).thenReturn(leadResponse);
+
+        LeadResponse result = leadService.getById(1L);
+
+        assertNotNull(result);
+        assertEquals(1L, result.getId());
+        verify(leadRepository, times(1)).findById(1L);
+    }
+
+    @Test
+    void getById_whenLeadNotFound_thenThrowsException() {
+        when(leadRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class, () -> leadService.getById(99L));
+
+        verify(leadRepository, times(1)).findById(99L);
+        verifyNoInteractions(leadMapper);
+    }
 }

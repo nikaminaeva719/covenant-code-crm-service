@@ -6,6 +6,7 @@ import com.covenantcode.crm.entity.Course;
 import com.covenantcode.crm.entity.Role;
 import com.covenantcode.crm.entity.User;
 import com.covenantcode.crm.entity.enums.CourseStatus;
+import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.entity.enums.RoleName;
 import com.covenantcode.crm.repository.CourseRepository;
@@ -15,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import com.covenantcode.crm.repository.LeadRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -24,9 +26,10 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
-
+import static org.hamcrest.Matchers.is;
+import static org.springframework.http.MediaType.APPLICATION_JSON;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import java.math.BigDecimal;
-
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -54,6 +57,9 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private LeadRepository leadRepository;
 
     private Course testCourse;
     private User testManager;
@@ -152,7 +158,6 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
     void createLead_emptyFirstName_shouldReturn400() throws Exception {
         LeadCreateRequest request = new LeadCreateRequest();
         request.setPhone("+79001112233");
-
         mockMvc.perform(post(baseUrl)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
@@ -161,5 +166,49 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(jsonPath("$.errors").isArray())
                 .andExpect(jsonPath("$.errors[0].field").value("firstName"))
                 .andExpect(jsonPath("$.errors[0].message").value(containsString("обязательно")));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void getLead_whenLeadExists_thenHttp200WithAllFields() throws Exception {
+
+        Lead lead = new Lead();
+        lead.setFirstName("Ivan");
+        lead.setLastName("Petrov");
+        lead.setEmail("ivan@example.com");
+        lead.setPhone("+79990000000");
+        lead.setStatus(LeadStatus.NEW);
+
+        Lead saved = leadRepository.saveAndFlush(lead);
+
+        mockMvc.perform(get("/api/v1/leads/{id}", saved.getId())
+                        .accept(APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id", is(saved.getId().intValue())))
+                .andExpect(jsonPath("$.status", is(saved.getStatus().name())));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void getLead_whenLeadNotExists_thenHttp404() throws Exception {
+
+        mockMvc.perform(get("/api/v1/leads/{id}", 9999L)
+                        .accept(APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type", is("resource-not-found")));
+    }
+
+    @Test
+    @WithMockUser(roles = "TEACHER")
+    void getLead_whenUserHasTeacherRole_thenHttp403() throws Exception {
+        Lead lead = new Lead();
+        lead.setFirstName("Ivan");
+        lead.setPhone("+79990000000");
+        lead.setStatus(LeadStatus.NEW);
+        Lead saved = leadRepository.saveAndFlush(lead);
+
+        mockMvc.perform(get("/api/v1/leads/{id}", saved.getId())
+                        .accept(APPLICATION_JSON))
+                .andExpect(status().isForbidden());
     }
 }

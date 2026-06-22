@@ -50,4 +50,13 @@ public class LeadServiceImpl implements LeadService {
         Lead saved = leadRepository.save(lead);
         return leadMapper.toResponse(saved);
     }
+
+    @Transactional(readOnly = true)
+    public LeadResponse getById(Long id) {
+        Lead lead = leadRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead с id " + id + " не найден"));
+        LeadResponse response = leadMapper.toResponse(lead);
+        response.setCommentsCount(0L);
+        return response;
+    }
 }

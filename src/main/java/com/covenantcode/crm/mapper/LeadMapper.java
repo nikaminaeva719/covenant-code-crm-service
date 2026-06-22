@@ -8,13 +8,14 @@ import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.entity.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
-
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
-@Mapper
+@Mapper(componentModel = "spring")
 public interface LeadMapper {
 
+    @Mapping(target = "interestedCourse", source = "interestedCourse")
+    @Mapping(target = "assignedManager", source = "assignedManager")
     @Mapping(target = "convertedStudentId", source = "convertedStudent.id")
     LeadResponse toResponse(Lead lead);
 

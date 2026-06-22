@@ -8,4 +8,5 @@ public interface LeadService {
 
     LeadResponse create(LeadCreateRequest leadCreateRequest);
 
+    LeadResponse getById(Long id);
 }
