@@ -13,6 +13,10 @@ import com.covenantcode.crm.mapper.LeadMapper;
 import com.covenantcode.crm.repository.CourseRepository;
 import com.covenantcode.crm.repository.LeadRepository;
 import com.covenantcode.crm.repository.UserRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -22,7 +26,16 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -239,5 +252,94 @@ class LeadServiceImplTest {
 
         verify(leadRepository, times(1)).findById(99L);
         verifyNoInteractions(leadMapper);
+    }
+
+    // --- Тест 1: Без фильтров, возвращает все лиды ---
+    @Test
+    @DisplayName("Возвращает все лиды постранично без фильтров")
+    void getAllWithoutFiltersShouldReturnAllLeadsPaginated() {
+        // Given
+        Pageable pageable = PageRequest.of(0, 20);
+        Lead lead1 = new Lead();
+        lead1.setId(1L);
+        lead1.setFirstName("Lead1");
+
+        Lead lead2 = new Lead();
+        lead2.setId(2L);
+        lead2.setFirstName("Lead2");
+
+        List<Lead> leads = List.of(lead1, lead2);
+        Page<Lead> leadPage = new PageImpl<>(leads, pageable, leads.size());
+
+        LeadResponse leadResponse1 = new LeadResponse();
+        leadResponse1.setId(1L);
+        leadResponse1.setFirstName("Lead1");
+
+        LeadResponse leadResponse2 = new LeadResponse();
+        leadResponse2.setId(2L);
+        leadResponse2.setFirstName("Lead2");
+
+        // Mocking
+        when(leadRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(leadPage);
+        when(leadMapper.toResponse(lead1)).thenReturn(leadResponse1);
+        when(leadMapper.toResponse(lead2)).thenReturn(leadResponse2);
+
+        // When
+        Page<LeadResponse> result = leadService.getAll(
+                null,    // search
+                null,    // status
+                null,    // assignedManagerId
+                null,    // interestedCourseId
+                pageable
+        );
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).hasSize(2);
+        assertThat(result.getTotalElements()).isEqualTo(2);
+        assertThat(result.getTotalPages()).isEqualTo(1);
+    }
+
+    // --- Тест 2: С фильтром status=NEW ---
+    @Test
+    @DisplayName("Фильтрует лиды по статусу NEW, спецификация передаётся в репозиторий")
+    void getAllWithStatusFilterShouldApplySpecification() {
+        // Given
+        LeadStatus status = LeadStatus.NEW;
+        Pageable pageable = PageRequest.of(0, 20);
+
+        Lead leadWithStatusNew = new Lead();
+        leadWithStatusNew.setId(1L);
+        leadWithStatusNew.setStatus(status);
+
+        List<Lead> leads = List.of(leadWithStatusNew);
+        Page<Lead> leadPage = new PageImpl<>(leads, pageable, leads.size());
+
+        LeadResponse leadResponse = new LeadResponse();
+        leadResponse.setId(1L);
+
+        // Mocking
+        when(leadRepository.findAll(any(Specification.class), eq(pageable))).thenReturn(leadPage);
+        when(leadMapper.toResponse(leadWithStatusNew)).thenReturn(leadResponse);
+
+        // When
+        Page<LeadResponse> result = leadService.getAll(
+                null,      // search
+                status,    // status=NEW
+                null,      // assignedManagerId
+                null,      // interestedCourseId
+                pageable
+        );
+
+        // Then
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).hasSize(1);
+
+        // Проверка, что спецификация передаётся в репозиторий
+        ArgumentCaptor<Specification<Lead>> specCaptor = ArgumentCaptor.forClass(Specification.class);
+        verify(leadRepository, times(1)).findAll(specCaptor.capture(), eq(pageable));
+
+        Specification<Lead> capturedSpec = specCaptor.getValue();
+        assertThat(capturedSpec).isNotNull();
     }
 }

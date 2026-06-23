@@ -30,6 +30,8 @@ import static org.hamcrest.Matchers.is;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import java.math.BigDecimal;
+import java.util.List;
+
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -211,4 +213,96 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
                         .accept(APPLICATION_JSON))
                 .andExpect(status().isForbidden());
     }
+
+// Добавьте в существующий класс LeadControllerIntegrationTest
+
+    // ===== Тесты получения всех лидов с пагинацией и фильтрацией =====
+
+    @Test
+    @DisplayName("Получить все лиды без фильтров - возвращает все лиды постранично")
+    void testControllerIntegrationGetAllLeadsNoFiltersShouldReturnAllWithPagination() throws Exception {
+        // Создаем 3 лида с разными статусами
+        Lead lead1 = createLeadWithStatus(LeadStatus.NEW);
+        Lead lead2 = createLeadWithStatus(LeadStatus.IN_PROGRESS);
+        Lead lead3 = createLeadWithStatus(LeadStatus.CONTACTED);
+
+        // Получаем все ID сохранённых лидов
+        List<Long> leadIds = List.of(lead1.getId(), lead2.getId(), lead3.getId());
+
+        // Выполняем один запрос и проверяем результат
+        mockMvc.perform(get(baseUrl)
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements", is(3)))
+                .andExpect(jsonPath("$.content", Matchers.hasSize(3)))
+                .andExpect(jsonPath("$.content[*].id", Matchers.containsInAnyOrder(
+                        lead1.getId().intValue(),
+                        lead2.getId().intValue(),
+                        lead3.getId().intValue()
+                )));
+    }
+
+
+    @Test
+    @DisplayName("Фильтрация лидов по статусу NEW - возвращает только NEW лиды")
+    void testControllerIntegrationGetAllLeadsByStatusNewShouldReturnOnlyNew() throws Exception {
+        // Создаем 2 NEW лида и 1 IN_PROGRESS
+        Lead lead1 = createLeadWithStatus(LeadStatus.NEW);
+        Lead lead2 = createLeadWithStatus(LeadStatus.NEW);
+        Lead lead3 = createLeadWithStatus(LeadStatus.IN_PROGRESS);
+
+        mockMvc.perform(get(baseUrl)
+                        .param("status", LeadStatus.NEW.name())
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements", is(2)))
+                .andExpect(jsonPath("$.content", Matchers.hasSize(2)))
+                .andExpect(jsonPath("$.content[*].status", Matchers.everyItem(is(LeadStatus.NEW.name()))));
+    }
+
+    @Test
+    @DisplayName("Поиск лидов по части телефона - возвращает лиды с совпадающим номером")
+    void testControllerIntegrationSearchLeadsByPhonePartShouldReturnMatchingLeads() throws Exception {
+        // Создаем лид с нужным телефоном
+        Lead lead = new Lead();
+        lead.setFirstName("Client");
+        lead.setPhone("+79161234567");
+        lead.setStatus(LeadStatus.NEW);
+        leadRepository.saveAndFlush(lead);
+
+        mockMvc.perform(get(baseUrl)
+                        .param("search", "9161")
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements", is(1)))
+                .andExpect(jsonPath("$.content[0].phone", is("+79161234567")));
+    }
+
+    @Test
+    @WithMockUser(roles = "TEACHER")
+    @DisplayName("Попытка доступа с ролью TEACHER к эндпоинту getAll -> HTTP 403")
+    void testControllerIntegrationGetAllLeadsWithTeacherRoleShouldReturn403() throws Exception {
+        // Создаем несколько лидов для теста
+        for (int i = 0; i < 3; i++) {
+            createLeadWithStatus(LeadStatus.NEW);
+        }
+
+        mockMvc.perform(get(baseUrl)
+                        .param("page", "0")
+                        .param("size", "20"))
+                .andExpect(status().isForbidden());
+    }
+
+    // ===== Вспомогательный метод для создания лидов =====
+    private Lead createLeadWithStatus(LeadStatus status) {
+        Lead lead = new Lead();
+        lead.setFirstName("Test_" + status.name());
+        lead.setPhone("+7900" + (int)(Math.random() * 100000000));
+        lead.setStatus(status);
+        return leadRepository.saveAndFlush(lead);
+    }
+
 }
