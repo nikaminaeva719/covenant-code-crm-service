@@ -1,20 +1,20 @@
 package com.covenantcode.crm.controller;
 
 import com.covenantcode.crm.BaseIntegrationTest;
+import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
-import com.covenantcode.crm.entity.Course;
-import com.covenantcode.crm.entity.Role;
-import com.covenantcode.crm.entity.User;
+import com.covenantcode.crm.entity.*;
 import com.covenantcode.crm.entity.enums.CourseStatus;
-import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.entity.enums.RoleName;
 import com.covenantcode.crm.repository.CourseRepository;
 import com.covenantcode.crm.repository.RoleRepository;
 import com.covenantcode.crm.repository.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import com.covenantcode.crm.repository.LeadRepository;
 import org.junit.jupiter.api.Test;
@@ -23,13 +23,16 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 
 import static org.hamcrest.Matchers.containsString;
@@ -59,6 +62,9 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Autowired
     private LeadRepository leadRepository;
@@ -285,7 +291,7 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
     @WithMockUser(roles = "TEACHER")
     @DisplayName("Попытка доступа с ролью TEACHER к эндпоинту getAll -> HTTP 403")
     void testControllerIntegrationGetAllLeadsWithTeacherRoleShouldReturn403() throws Exception {
-        // Создаем несколько лидов для теста
+
         for (int i = 0; i < 3; i++) {
             createLeadWithStatus(LeadStatus.NEW);
         }
@@ -296,7 +302,6 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ===== Вспомогательный метод для создания лидов =====
     private Lead createLeadWithStatus(LeadStatus status) {
         Lead lead = new Lead();
         lead.setFirstName("Test_" + status.name());
@@ -305,4 +310,206 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
         return leadRepository.saveAndFlush(lead);
     }
 
+    @Test
+    @DisplayName("POST /{id}/convert — Успех (201) от MANAGER")
+    @WithMockUser(roles = "MANAGER")
+    void convertLead_Success_Manager() throws Exception {
+
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Студент")
+                .lastName("Тестовый")
+                .phone("+79998887766")
+                .email("student@test.com")
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/{id}/convert", lead.getId())
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.firstName").value("Студент"))
+                .andExpect(jsonPath("$.lastName").value("Тестовый"))
+                .andExpect(jsonPath("$.phone").value("+79998887766"))
+                .andExpect(jsonPath("$.email").value("student@test.com"))
+                .andExpect(jsonPath("$.birthDate").value("2000-01-01"))
+                .andExpect(jsonPath("$.userId").value(Matchers.nullValue()));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Lead updatedLead = leadRepository.findById(lead.getId()).orElseThrow();
+        assertEquals(LeadStatus.CONVERTED_TO_STUDENT, updatedLead.getStatus());
+
+        Student savedStudent = updatedLead.getConvertedStudent();
+        assertNotNull(savedStudent);
+        assertEquals("Студент", savedStudent.getFirstName());
+        assertEquals("Тестовый", savedStudent.getLastName());
+        assertEquals("+79998887766", savedStudent.getPhone());
+        assertEquals("student@test.com", savedStudent.getEmail());
+        assertEquals(LocalDate.of(2000, 1, 1), savedStudent.getBirthDate());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/convert — Успех (201) от ADMIN")
+    @WithMockUser(roles = "ADMIN")
+    void convertLead_Success_Admin() throws Exception {
+
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Студент")
+                .lastName("Тестовый")
+                .phone("+79998887766")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/{id}/convert", lead.getId())
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.firstName").value("Студент"))
+                .andExpect(jsonPath("$.lastName").value("Тестовый"))
+                .andExpect(jsonPath("$.phone").value("+79998887766"));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Lead updatedLead = leadRepository.findById(lead.getId()).orElseThrow();
+        assertEquals(LeadStatus.CONVERTED_TO_STUDENT, updatedLead.getStatus());
+        assertNotNull(updatedLead.getConvertedStudent());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/convert — Ошибка 409 если уже конвертирован")
+    @WithMockUser(roles = "MANAGER")
+    void convertLead_AlreadyConverted_Returns409() throws Exception {
+
+        Lead lead = createLeadWithStatus(LeadStatus.CONVERTED_TO_STUDENT);
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Имя")
+                .lastName("Фамилия")
+                .phone("123")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/{id}/convert", lead.getId())
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("conflict"));
+    }
+
+    @Test
+    @DisplayName("POST /9999/convert — Лид не найден (404)")
+    @WithMockUser(roles = "MANAGER")
+    void convertLead_NotFound_Returns404() throws Exception {
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Имя")
+                .lastName("Фамилия")
+                .phone("123")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/9999/convert")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("resource-not-found"));
+    }
+
+    @Test
+    @DisplayName("POST /{id}/convert — Валидация (400) при пустом firstName")
+    @WithMockUser(roles = "MANAGER")
+    void convertLead_InvalidRequest_Returns400() throws Exception {
+
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("")
+                .lastName("Фамилия")
+                .phone("+79990000000")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/{id}/convert", lead.getId())
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("validation-error"))
+                .andExpect(jsonPath("$.errors").isArray())
+                .andExpect(jsonPath("$.errors").isNotEmpty());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/convert — Доступ запрещен (403) для STUDENT")
+    @WithMockUser(roles = "STUDENT")
+    void convertLead_ForbiddenForStudent() throws Exception {
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Ivan")
+                .lastName("Petrov")
+                .phone("+79990000000")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/1/convert")
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+  //  @Disabled
+    @Test
+    @DisplayName("POST /{id}/convert — Без токена (401)")
+    @WithAnonymousUser
+    void convertLead_UnauthorizedWithoutToken() throws Exception {
+
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Ivan")
+                .lastName("Petrov")
+                .phone("+79990000000")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/{id}/convert", lead.getId())
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /{id}/convert — Только обязательные поля (201)")
+    @WithMockUser(roles = "MANAGER")
+    void convertLead_MinimalFields_Success() throws Exception {
+
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Min")
+                .lastName("Max")
+                .phone("555")
+                .build();
+
+        mockMvc.perform(post(baseUrl + "/{id}/convert", lead.getId())
+                        .contentType(APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.firstName").value("Min"))
+                .andExpect(jsonPath("$.lastName").value("Max"))
+                .andExpect(jsonPath("$.phone").value("555"))
+                .andExpect(jsonPath("$.userId").value(Matchers.nullValue()))
+                .andExpect(jsonPath("$.email").value(Matchers.nullValue()))
+                .andExpect(jsonPath("$.birthDate").value(Matchers.nullValue()));
+
+        entityManager.flush();
+        entityManager.clear();
+
+        Student student = leadRepository.findById(lead.getId())
+                .orElseThrow()
+                .getConvertedStudent();
+
+        assertNotNull(student);
+        assertNull(student.getEmail());
+        assertNull(student.getBirthDate());
+    }
 }

@@ -1,22 +1,20 @@
 package com.covenantcode.crm.service.impl;
 
-import com.covenantcode.crm.dto.lead.CourseShortResponse;
-import com.covenantcode.crm.dto.lead.LeadCreateRequest;
-import com.covenantcode.crm.dto.lead.LeadResponse;
-import com.covenantcode.crm.dto.lead.UserShortResponse;
+import com.covenantcode.crm.dto.lead.*;
+import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.entity.Course;
 import com.covenantcode.crm.entity.Lead;
+import com.covenantcode.crm.entity.Student;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.entity.User;
+import com.covenantcode.crm.exception.ConflictException;
 import com.covenantcode.crm.exception.ResourceNotFoundException;
 import com.covenantcode.crm.mapper.LeadMapper;
+import com.covenantcode.crm.mapper.StudentMapper;
 import com.covenantcode.crm.repository.CourseRepository;
 import com.covenantcode.crm.repository.LeadRepository;
+import com.covenantcode.crm.repository.StudentRepository;
 import com.covenantcode.crm.repository.UserRepository;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Predicate;
-import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -27,20 +25,20 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -55,6 +53,12 @@ class LeadServiceImplTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private StudentRepository studentRepository;
+
+    @Mock
+    private StudentMapper studentMapper;
 
     @Mock
     private LeadMapper leadMapper;
@@ -341,5 +345,82 @@ class LeadServiceImplTest {
 
         Specification<Lead> capturedSpec = specCaptor.getValue();
         assertThat(capturedSpec).isNotNull();
+    }
+    @Test
+    @DisplayName("Успешная конвертация лида в студента")
+    void convertToStudent_Success() {
+
+        Long leadId = 1L;
+        LeadConvertRequest request = LeadConvertRequest.builder()
+                .firstName("Иван")
+                .lastName("Иванов")
+                .phone("+79001112233")
+                .email("ivan@test.com")
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
+
+        Lead lead = new Lead();
+        lead.setId(leadId);
+        lead.setStatus(LeadStatus.NEW);
+
+        Student savedStudent = new Student();
+        savedStudent.setId(10L);
+        savedStudent.setFirstName(request.getFirstName());
+
+        savedStudent.setUser(null);
+
+        StudentResponse expectedResponse = new StudentResponse();
+        expectedResponse.setId(10L);
+        expectedResponse.setFirstName("Иван");
+
+        when(leadRepository.findById(leadId)).thenReturn(Optional.of(lead));
+        when(studentRepository.save(any(Student.class))).thenAnswer(invocation -> {
+            Student s = invocation.getArgument(0);
+            s.setId(10L);
+            return s;
+        });
+        when(studentMapper.toResponse(any(Student.class))).thenReturn(expectedResponse);
+
+        StudentResponse result = leadService.convertToStudent(leadId, request);
+
+        assertNotNull(result);
+        assertEquals("Иван", result.getFirstName());
+
+        assertEquals(LeadStatus.CONVERTED_TO_STUDENT, lead.getStatus());
+
+        assertNotNull(lead.getConvertedStudent());
+        assertEquals(10L, lead.getConvertedStudent().getId());
+
+        assertNull(lead.getConvertedStudent().getUser(), "UserId должен быть null");
+
+        verify(studentRepository, times(1)).save(any(Student.class));
+
+        verify(leadRepository, times(1)).save(lead);
+    }
+
+    @Test
+    @DisplayName("Конвертация: лид не найден - ResourceNotFoundException")
+    void convertToStudent_LeadNotFound_ThrowsException() {
+
+        when(leadRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThrows(ResourceNotFoundException.class,
+                () -> leadService.convertToStudent(99L, new LeadConvertRequest()));
+
+        verify(studentRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Конвертация: лид уже конвертирован - ConflictException")
+    void convertToStudent_AlreadyConverted_ThrowsException() {
+
+        Lead lead = new Lead();
+        lead.setStatus(LeadStatus.CONVERTED_TO_STUDENT);
+        when(leadRepository.findById(1L)).thenReturn(Optional.of(lead));
+
+        assertThrows(ConflictException.class,
+                () -> leadService.convertToStudent(1L, new LeadConvertRequest()));
+
+        verify(studentRepository, never()).save(any());
     }
 }

@@ -1,7 +1,9 @@
 package com.covenantcode.crm.controller;
 
+import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
 import com.covenantcode.crm.dto.lead.LeadResponse;
+import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.service.LeadService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -17,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -85,6 +88,23 @@ public class LeadController {
 
         Pageable pageable = PageRequest.of(page, size, Sort.unsorted());
         return leadService.getAll(search, status, assignedManagerId, interestedCourseId, pageable);
+    }
+
+    @PostMapping("/{id}/convert")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Конвертирование лида в студента")
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Успешная конвертация лида в студента"),
+            @ApiResponse(responseCode = "401", description = "Не авторизован"),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещён"),
+            @ApiResponse(responseCode = "404", description = "Лид не найден")
+    })
+    public ResponseEntity<StudentResponse> convertToStudent(
+            @PathVariable Long id,
+            @Valid @RequestBody LeadConvertRequest request
+    ) {
+        StudentResponse response = leadService.convertToStudent(id, request);
+        return ResponseEntity.status(201).body(response);
     }
 }
 

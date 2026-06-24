@@ -1,15 +1,17 @@
 package com.covenantcode.crm.service.impl;
 
+import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
 import com.covenantcode.crm.dto.lead.LeadResponse;
+import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.entity.Lead;
+import com.covenantcode.crm.entity.Student;
 import com.covenantcode.crm.entity.enums.LeadStatus;
+import com.covenantcode.crm.exception.ConflictException;
 import com.covenantcode.crm.exception.ResourceNotFoundException;
 import com.covenantcode.crm.mapper.LeadMapper;
-import com.covenantcode.crm.repository.CourseRepository;
-import com.covenantcode.crm.repository.LeadRepository;
-import com.covenantcode.crm.repository.LeadSpecifications;
-import com.covenantcode.crm.repository.UserRepository;
+import com.covenantcode.crm.mapper.StudentMapper;
+import com.covenantcode.crm.repository.*;
 import com.covenantcode.crm.service.LeadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -27,6 +29,9 @@ public class LeadServiceImpl implements LeadService {
     private final CourseRepository courseRepository;
     private final UserRepository userRepository;
     private final LeadMapper leadMapper;
+
+    private final StudentRepository studentRepository;
+    private final StudentMapper studentMapper;
 
     @Override
     @Transactional
@@ -94,5 +99,32 @@ public class LeadServiceImpl implements LeadService {
 
         return leadRepository.findAll(spec, pageable)
                 .map(leadMapper::toResponse);
+    }
+
+    @Override
+    @Transactional
+    public StudentResponse convertToStudent(Long leadId, LeadConvertRequest request) {
+        Lead lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead с id " + leadId + " не найден"));
+
+        if (lead.getStatus() == LeadStatus.CONVERTED_TO_STUDENT) {
+            throw new ConflictException("Лид с id " + leadId + " уже был конвертирован в студента");
+        }
+
+        Student student = Student.builder()
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .phone(request.getPhone())
+                .email(request.getEmail())
+                .birthDate(request.getBirthDate())
+                .build();
+
+        Student savedStudent = studentRepository.save(student);
+
+        lead.setStatus(LeadStatus.CONVERTED_TO_STUDENT);
+        lead.setConvertedStudent(savedStudent);
+        leadRepository.save(lead);
+
+        return studentMapper.toResponse(savedStudent);
     }
 }

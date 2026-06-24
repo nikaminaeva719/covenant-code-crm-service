@@ -1,8 +1,10 @@
 package com.covenantcode.crm.service;
 
 
+import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
 import com.covenantcode.crm.dto.lead.LeadResponse;
+import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -20,4 +22,6 @@ public interface LeadService {
             Long interestedCourseId, // новый параметр
             Pageable pageable
     );
+
+    StudentResponse convertToStudent(Long leadId, LeadConvertRequest request);
 }
