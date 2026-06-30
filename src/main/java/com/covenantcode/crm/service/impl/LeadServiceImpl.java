@@ -6,6 +6,7 @@ import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
 import com.covenantcode.crm.dto.lead.LeadResponse;
 import com.covenantcode.crm.dto.student.StudentResponse;
+import com.covenantcode.crm.dto.lead.LeadStatusUpdateRequest;
 import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.dto.lead.LeadUpdateRequest;
 import com.covenantcode.crm.entity.Course;
@@ -19,7 +20,12 @@ import com.covenantcode.crm.exception.ResourceNotFoundException;
 import com.covenantcode.crm.mapper.LeadCommentMapper;
 import com.covenantcode.crm.mapper.LeadMapper;
 import com.covenantcode.crm.mapper.StudentMapper;
-import com.covenantcode.crm.repository.*;
+import com.covenantcode.crm.repository.CourseRepository;
+import com.covenantcode.crm.repository.LeadCommentRepository;
+import com.covenantcode.crm.repository.LeadRepository;
+import com.covenantcode.crm.repository.LeadSpecifications;
+import com.covenantcode.crm.repository.StudentRepository;
+import com.covenantcode.crm.repository.UserRepository;
 import com.covenantcode.crm.service.LeadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.util.StringUtils;
@@ -192,4 +198,21 @@ public class LeadServiceImpl implements LeadService {
 
         return leadMapper.toResponse(updatedLead);
     }
+
+    @Override
+    public LeadResponse updateStatus(Long id, LeadStatusUpdateRequest request) {
+        Lead lead = leadRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Lead с id " + id + " не найден"));
+
+        if (request.getStatus() == LeadStatus.CONVERTED_TO_STUDENT) {
+            throw new ConflictException(
+                    "Статус CONVERTED_TO_STUDENT нельзя установить вручную. Используйте POST /api/v1/leads/%d/convert".formatted(id)
+            );
+        }
+
+        lead.setStatus(request.getStatus());
+        Lead updatedLead = leadRepository.save(lead);
+        return leadMapper.toResponse(updatedLead);
+        }
+
 }

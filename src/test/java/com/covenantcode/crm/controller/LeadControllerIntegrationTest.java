@@ -2,16 +2,16 @@ package com.covenantcode.crm.controller;
 
 import com.covenantcode.crm.BaseIntegrationTest;
 import com.covenantcode.crm.dto.lead.LeadCommentCreateRequest;
+import com.covenantcode.crm.dto.lead.LeadCommentResponse;
 import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
-import com.covenantcode.crm.dto.lead.LeadCommentResponse;
 import com.covenantcode.crm.dto.lead.LeadUpdateRequest;
-
+import com.covenantcode.crm.dto.lead.LeadStatusUpdateRequest;
+import com.covenantcode.crm.entity.Student;
+import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.entity.Course;
 import com.covenantcode.crm.entity.Role;
 import com.covenantcode.crm.entity.User;
-import com.covenantcode.crm.entity.Lead;
-import com.covenantcode.crm.entity.Student;
 import com.covenantcode.crm.entity.enums.CourseStatus;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.entity.enums.RoleName;
@@ -38,7 +38,10 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.hamcrest.Matchers.is;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
@@ -53,7 +56,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -770,6 +775,7 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
         assertTrue(response.getCreatedAt().isBefore(afterRequest) || response.getCreatedAt().isEqual(afterRequest));
     }
 
+
     @Test
     @DisplayName("Тест 1: обновление данных работает → HTTP 200")
     @WithMockUser(roles = "MANAGER")
@@ -888,4 +894,116 @@ public class LeadControllerIntegrationTest extends BaseIntegrationTest {
         assertThat(unchangedLead.getPhone()).isEqualTo("+79161111111");
         assertThat(unchangedLead.getStatus()).isEqualTo(LeadStatus.NEW);
     }
+    @Test
+    @DisplayName("PATCH /{id}/status с валидным статусом от пользователя с ролью MANAGER — ответ 200, тело содержит обновлённый статус")
+    void changeStatus_ValidStatus_Manager_ShouldReturn200() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest(LeadStatus.IN_PROGRESS);
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(lead.getId().intValue()))
+                .andExpect(jsonPath("$.status").value(LeadStatus.IN_PROGRESS.name()));
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/status от пользователя с ролью ADMIN — ответ 200")
+    void changeStatus_ValidStatus_Admin_ShouldReturn200() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest(LeadStatus.CONTACTED);
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(lead.getId().intValue()))
+                .andExpect(jsonPath("$.status").value(LeadStatus.CONTACTED.name()));
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/status от пользователя с ролью STUDENT — ответ 403")
+    @WithMockUser(roles = "STUDENT")
+    void changeStatus_StudentRole_ShouldReturn403() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest(LeadStatus.IN_PROGRESS);
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/status без токена — ответ 401")
+    void changeStatus_WithoutToken_ShouldReturn401() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest(LeadStatus.IN_PROGRESS);
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.securityContext(
+                                org.springframework.security.core.context.SecurityContextHolder.createEmptyContext()
+                        ))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/status с status: \"CONVERTED_TO_STUDENT\" — ответ 409")
+    void changeStatus_ToConvertedToStudentDirectly_ShouldReturn409() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest(LeadStatus.CONVERTED_TO_STUDENT);
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("conflict"));
+    }
+
+    @Test
+    @DisplayName("PATCH /9999/status — ответ 404")
+    void changeStatus_LeadNotFound_ShouldReturn404() throws Exception {
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest(LeadStatus.IN_PROGRESS);
+
+        mockMvc.perform(patch(baseUrl + "/9999/status")
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("resource-not-found"));
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/status с телом {} — ответ 400 с полем errors")
+    void changeStatus_EmptyBody_ShouldReturn400() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors").exists());
+    }
+
+    @Test
+    @DisplayName("PATCH /{id}/status с неизвестным значением статуса (строка) — ответ 400")
+    void changeStatus_InvalidEnumString_ShouldReturn400() throws Exception {
+        Lead lead = createLeadWithStatus(LeadStatus.NEW);
+        String invalidJson = "{\"status\": \"UNKNOWN_LEAD_STATUS_VALUE\"}";
+
+        mockMvc.perform(patch(baseUrl + "/{id}/status", lead.getId())
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidJson))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("bad-request"));
+    }
+
 }

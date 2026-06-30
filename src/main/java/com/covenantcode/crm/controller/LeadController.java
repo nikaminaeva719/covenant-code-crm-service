@@ -9,6 +9,7 @@ import com.covenantcode.crm.dto.lead.LeadUpdateRequest;
 import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.service.AuthService;
+import com.covenantcode.crm.dto.lead.LeadStatusUpdateRequest;
 import com.covenantcode.crm.service.LeadService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -26,9 +27,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -134,7 +132,6 @@ public class LeadController {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
-
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
     @Operation(summary = "Обновить данные лида", description = "Обновляет контактные данные лида. Статус не изменяется!")
@@ -151,6 +148,27 @@ public class LeadController {
             @Valid @RequestBody LeadUpdateRequest request) {
         return ResponseEntity.ok(leadService.update(id, request));
     }
+
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'MANAGER')")
+    @Operation(summary = "Обновить статус лида",
+            description = "Изменяет статус существующего лида. Запрещено устанавливать CONVERTED_TO_STUDENT вручную.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Статус успешно обновлён",
+                    content = @Content(schema = @Schema(implementation = LeadResponse.class))),
+            @ApiResponse(responseCode = "400", description = "Некорректные данные запроса (статус null)"),
+            @ApiResponse(responseCode = "401", description = "Пользователь не аутентифицирован"),
+            @ApiResponse(responseCode = "403", description = "Недостаточно прав (требуется ADMIN или MANAGER)"),
+            @ApiResponse(responseCode = "404", description = "Лид с указанным ID не найден"),
+            @ApiResponse(responseCode = "409", description = "Попытка установить статус CONVERTED_TO_STUDENT вручную")
+    })
+    public ResponseEntity<LeadResponse> updateStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody LeadStatusUpdateRequest request) {
+        LeadResponse updated = leadService.updateStatus(id, request);
+        return ResponseEntity.ok(updated);
+    }
+
 }
 
 

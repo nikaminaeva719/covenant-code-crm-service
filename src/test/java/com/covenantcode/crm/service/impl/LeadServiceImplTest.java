@@ -10,14 +10,26 @@ import com.covenantcode.crm.dto.lead.UserShortResponse;
 import com.covenantcode.crm.dto.lead.LeadUpdateRequest;
 import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 
+import com.covenantcode.crm.dto.lead.CourseShortResponse;
+import com.covenantcode.crm.dto.lead.LeadCommentCreateRequest;
+import com.covenantcode.crm.dto.lead.LeadCommentResponse;
+import com.covenantcode.crm.dto.lead.LeadConvertRequest;
+import com.covenantcode.crm.dto.lead.LeadCreateRequest;
+import com.covenantcode.crm.dto.lead.LeadResponse;
+import com.covenantcode.crm.dto.lead.LeadStatusUpdateRequest;
+import com.covenantcode.crm.dto.lead.UserShortResponse;
 import com.covenantcode.crm.dto.student.StudentResponse;
 
 import com.covenantcode.crm.entity.User;
 import com.covenantcode.crm.entity.Course;
 import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.entity.enums.LeadStatus;
-import com.covenantcode.crm.entity.Student;
+import com.covenantcode.crm.entity.Course;
+import com.covenantcode.crm.entity.Lead;
 import com.covenantcode.crm.entity.LeadComment;
+import com.covenantcode.crm.entity.Student;
+import com.covenantcode.crm.entity.User;
+import com.covenantcode.crm.entity.enums.LeadStatus;
 import com.covenantcode.crm.exception.ConflictException;
 import com.covenantcode.crm.exception.BadRequestException;
 import com.covenantcode.crm.exception.ResourceNotFoundException;
@@ -39,7 +51,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.mockito.ArgumentMatchers.any;
-
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -54,9 +65,19 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class LeadServiceImplTest {
@@ -876,5 +897,81 @@ class LeadServiceImplTest {
 
         verify(leadCommentRepository, never()).save(any(LeadComment.class));
         verify(leadCommentMapper, never()).toResponse(any(LeadComment.class));
+    }
+
+    @Test
+    @DisplayName("Успешное обновление статуса – возвращает LeadResponse и вызывает save ровно один раз")
+    void updateStatus_success_shouldReturnLeadResponse() {
+        Long leadId = 1L;
+        LeadStatus newStatus = LeadStatus.IN_PROGRESS;
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest();
+        request.setStatus(newStatus);
+
+        Lead existingLead = new Lead();
+        existingLead.setId(leadId);
+        existingLead.setStatus(LeadStatus.NEW);
+
+        Lead updatedLead = new Lead();
+        updatedLead.setId(leadId);
+        updatedLead.setStatus(newStatus);
+
+        LeadResponse expectedResponse = new LeadResponse();
+        expectedResponse.setId(leadId);
+        expectedResponse.setStatus(newStatus.name());
+
+        when(leadRepository.findById(leadId)).thenReturn(Optional.of(existingLead));
+        when(leadRepository.save(any(Lead.class))).thenReturn(updatedLead);
+        when(leadMapper.toResponse(updatedLead)).thenReturn(expectedResponse);
+
+        LeadResponse result = leadService.updateStatus(leadId, request);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getId()).isEqualTo(leadId);
+        assertThat(result.getStatus()).isEqualTo(newStatus.name());
+
+        verify(leadRepository, times(1)).findById(leadId);
+        verify(leadRepository, times(1)).save(any(Lead.class));
+        verify(leadMapper, times(1)).toResponse(updatedLead);
+        verifyNoMoreInteractions(leadRepository, leadMapper);
+    }
+
+    @Test
+    @DisplayName("Лид не найден – бросается ResourceNotFoundException и save не вызывается")
+    void updateStatus_leadNotFound_shouldThrowResourceNotFoundException() {
+        Long leadId = 99L;
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest();
+        request.setStatus(LeadStatus.NEW);
+
+        when(leadRepository.findById(leadId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> leadService.updateStatus(leadId, request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Lead с id " + leadId + " не найден");
+
+        verify(leadRepository, times(1)).findById(leadId);
+        verify(leadRepository, never()).save(any(Lead.class));
+        verifyNoInteractions(leadMapper);
+    }
+
+    @Test
+    @DisplayName("Передан статус CONVERTED_TO_STUDENT – бросается ConflictException и save не вызывается")
+    void updateStatus_statusConvertedToStudent_shouldThrowConflictException() {
+        Long leadId = 1L;
+        LeadStatusUpdateRequest request = new LeadStatusUpdateRequest();
+        request.setStatus(LeadStatus.CONVERTED_TO_STUDENT);
+
+        Lead existingLead = new Lead();
+        existingLead.setId(leadId);
+        existingLead.setStatus(LeadStatus.NEW);
+
+        when(leadRepository.findById(leadId)).thenReturn(Optional.of(existingLead));
+
+        assertThatThrownBy(() -> leadService.updateStatus(leadId, request))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Статус CONVERTED_TO_STUDENT нельзя установить вручную. Используйте POST /api/v1/leads/" + leadId + "/convert");
+
+        verify(leadRepository, times(1)).findById(leadId);
+        verify(leadRepository, never()).save(any(Lead.class));
+        verifyNoInteractions(leadMapper);
     }
 }

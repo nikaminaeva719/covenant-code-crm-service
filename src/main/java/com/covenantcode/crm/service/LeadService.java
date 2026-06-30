@@ -1,11 +1,11 @@
 package com.covenantcode.crm.service;
 
-
 import com.covenantcode.crm.dto.lead.LeadCommentCreateRequest;
 import com.covenantcode.crm.dto.lead.LeadCommentResponse;
+import com.covenantcode.crm.dto.lead.LeadConvertRequest;
 import com.covenantcode.crm.dto.lead.LeadCreateRequest;
 import com.covenantcode.crm.dto.lead.LeadResponse;
-import com.covenantcode.crm.dto.lead.LeadConvertRequest;
+import com.covenantcode.crm.dto.lead.LeadStatusUpdateRequest;
 import com.covenantcode.crm.dto.lead.LeadUpdateRequest;
 import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.entity.enums.LeadStatus;
@@ -31,4 +31,6 @@ public interface LeadService {
     StudentResponse convertToStudent(Long leadId, LeadConvertRequest request);
 
     LeadResponse update(Long id, LeadUpdateRequest request);
+
+    LeadResponse updateStatus(Long id, LeadStatusUpdateRequest request);
 }
