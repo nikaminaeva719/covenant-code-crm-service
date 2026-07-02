@@ -44,11 +44,8 @@ import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 
 @Transactional
@@ -92,6 +89,7 @@ class StudentControllerIntegrationTest extends BaseIntegrationTest {
     private String adminToken;
     private String teacherToken;
     private String studentToken;
+    private String managerToken;
 
     @BeforeEach
     void setUp() {
@@ -221,7 +219,7 @@ class StudentControllerIntegrationTest extends BaseIntegrationTest {
         mockMvc.perform(get("/api/v1/students/{id}", 9999L)
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.type").value("resource-not-found"));
+                .andExpect(jsonPath("$.type").value("resource-not-found"));
     }
 
     @Test
@@ -630,5 +628,125 @@ class StudentControllerIntegrationTest extends BaseIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(updateRequest)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Тест 1: успешное удаление студента (204)")
+    void deleteStudent_ShouldReturn204_WhenStudentNotInActiveGroup() throws Exception {
+
+        Student studentToDelete = Student.builder()
+                .firstName("Test")
+                .lastName("Student")
+                .email("test-delete@example.com")
+                .phone("+1234567890")
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
+        studentToDelete = studentRepository.save(studentToDelete);
+
+        mockMvc.perform(delete("/api/v1/students/{id}", studentToDelete.getId())
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNoContent())
+                .andExpect(content().string(""));
+
+        assertThat(studentRepository.findById(studentToDelete.getId())).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Тест 2: студент не найден (404)")
+    void deleteStudent_ShouldReturn404_WhenStudentNotFound() throws Exception {
+        Long nonExistentId = 9999L;
+
+        mockMvc.perform(delete("/api/v1/students/{id}", nonExistentId)
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type", is("resource-not-found")))
+                .andExpect(jsonPath("$.detail", containsString("не найден")));
+    }
+
+    @Test
+    @DisplayName("Тест 3: студент в активной группе (409)")
+    void deleteStudent_ShouldReturn409_WhenStudentInActiveGroup() throws Exception {
+
+        Student studentInGroup = Student.builder()
+                .firstName("Group")
+                .lastName("Student")
+                .email("group-student@example.com")
+                .phone("+1234567890")
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
+        studentInGroup = studentRepository.save(studentInGroup);
+
+        StudyGroup activeGroup = StudyGroup.builder()
+                .name("Active Group For Delete Test")
+                .course(course)
+                .teacher(teacherUser)
+                .startDate(LocalDate.now().plusDays(5))
+                .status(GroupStatus.ACTIVE)
+                .students(Set.of(studentInGroup))
+                .build();
+        studyGroupRepository.save(activeGroup);
+
+        mockMvc.perform(delete("/api/v1/students/{id}", studentInGroup.getId())
+                        .header("Authorization", "Bearer " + adminToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type", is("conflict")))
+                .andExpect(jsonPath("$.detail", containsString("активной учебной группе")));
+
+
+        assertThat(studentRepository.findById(studentInGroup.getId())).isPresent();
+    }
+
+    @Test
+    @DisplayName("Тест 4: MANAGER не может удалить студента (403)")
+    void deleteStudent_ShouldReturn403_WhenUserIsManager() throws Exception {
+
+        Role managerRole = getOrCreateRole(RoleName.MANAGER);
+        User managerUser = userRepository.save(User.builder()
+                .firstName("Manager")
+                .lastName("Test")
+                .email("manager-test@test.ru")
+                .password(passwordEncoder.encode("password123"))
+                .role(managerRole)
+                .enabled(true)
+                .build());
+        String managerToken = jwtService.generateToken(managerUser);
+
+        Student studentToDelete = Student.builder()
+                .firstName("Manager")
+                .lastName("Test")
+                .email("manager-delete@example.com")
+                .phone("+1234567890")
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
+        studentToDelete = studentRepository.save(studentToDelete);
+
+        mockMvc.perform(delete("/api/v1/students/{id}", studentToDelete.getId())
+                        .header("Authorization", "Bearer " + managerToken)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+
+        assertThat(studentRepository.findById(studentToDelete.getId())).isPresent();
+    }
+
+    @Test
+    @DisplayName("Тест 5: отсутствует токен авторизации (401)")
+    void deleteStudent_ShouldReturn401_WhenNoToken() throws Exception {
+
+        Student studentToDelete = Student.builder()
+                .firstName("NoAuth")
+                .lastName("Student")
+                .email("noauth@example.com")
+                .phone("+1234567890")
+                .birthDate(LocalDate.of(2000, 1, 1))
+                .build();
+        studentToDelete = studentRepository.save(studentToDelete);
+
+
+        mockMvc.perform(delete("/api/v1/students/{id}", studentToDelete.getId())
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
     }
 }

@@ -12,6 +12,7 @@ import java.util.List;
 public interface StudentService {
 
     StudentResponse getById(Long id, User currentUser);
+
     List<StudentResponse> getAll();
 
     Page<StudentResponse> getAll(String search, Pageable pageable);
@@ -19,4 +20,6 @@ public interface StudentService {
     StudentResponse update(Long id, StudentUpdateRequest request);
 
     StudentResponse create(StudentCreateRequest studentCreateRequest);
+
+    void deleteById(Long id);
 }

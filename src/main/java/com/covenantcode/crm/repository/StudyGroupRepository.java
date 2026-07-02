@@ -10,4 +10,6 @@ public interface StudyGroupRepository extends JpaRepository<StudyGroup, Long> {
     boolean existsByCourseIdAndStatus(Long courseId, GroupStatus status);
 
     boolean existsByTeacherAndStudentsContaining(User teacher, Student student);
+
+    boolean existsByStudents_IdAndStatus(Long studentId, GroupStatus status);
 }

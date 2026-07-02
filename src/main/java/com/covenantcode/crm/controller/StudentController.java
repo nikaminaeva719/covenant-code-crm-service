@@ -20,15 +20,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 
 @RestController
@@ -106,5 +98,21 @@ public class StudentController {
             @AuthenticationPrincipal User currentUser
     ) {
         return ResponseEntity.ok(studentService.getById(id, currentUser));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    @Operation(summary = "Удалить студента", description = "Доступно только роли ADMIN. Студент не может быть удалён, если состоит в активной группе")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "204", description = "Студент успешно удалён"),
+            @ApiResponse(responseCode = "401", description = "Не авторизован"),
+            @ApiResponse(responseCode = "403", description = "Доступ запрещён (требуется роль ADMIN)"),
+            @ApiResponse(responseCode = "404", description = "Студент с указанным ID не найден"),
+            @ApiResponse(responseCode = "409", description = "Студент состоит в активной группе и не может быть удалён")
+    })
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        studentService.deleteById(id);
+        return ResponseEntity.noContent().build();
     }
 }

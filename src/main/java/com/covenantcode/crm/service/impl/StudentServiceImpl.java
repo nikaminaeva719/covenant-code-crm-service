@@ -5,6 +5,7 @@ import com.covenantcode.crm.dto.student.StudentResponse;
 import com.covenantcode.crm.dto.student.StudentUpdateRequest;
 import com.covenantcode.crm.entity.Student;
 import com.covenantcode.crm.entity.User;
+import com.covenantcode.crm.entity.enums.GroupStatus;
 import com.covenantcode.crm.entity.enums.RoleName;
 import com.covenantcode.crm.exception.ConflictException;
 import com.covenantcode.crm.exception.ResourceNotFoundException;
@@ -125,5 +126,20 @@ public class StudentServiceImpl implements StudentService {
         student.setBirthDate(request.getBirthDate());
         Student savedStudent = studentRepository.save(student);
         return studentMapper.toResponse(savedStudent);
+    }
+
+    @Override
+    @Transactional
+    public void deleteById(Long id) {
+
+        Student student = studentRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Student с id " + id + " не найден"));
+
+        boolean isInActiveGroup = studyGroupRepository.existsByStudents_IdAndStatus(id, GroupStatus.ACTIVE);
+        if (isInActiveGroup) {
+            throw new ConflictException("Студент с id " + id + " состоит в активной учебной группе и не может быть удалён");
+        }
+
+        studentRepository.delete(student);
     }
 }

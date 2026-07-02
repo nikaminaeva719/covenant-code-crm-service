@@ -6,6 +6,7 @@ import com.covenantcode.crm.dto.student.StudentUpdateRequest;
 import com.covenantcode.crm.entity.Role;
 import com.covenantcode.crm.entity.Student;
 import com.covenantcode.crm.entity.User;
+import com.covenantcode.crm.entity.enums.GroupStatus;
 import com.covenantcode.crm.entity.enums.RoleName;
 import com.covenantcode.crm.exception.ConflictException;
 import com.covenantcode.crm.exception.ResourceNotFoundException;
@@ -32,13 +33,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -502,5 +499,73 @@ class StudentServiceImplTest {
         assertEquals(request.getPhone(), existingStudent.getPhone());
 
         verify(studentRepository).save(existingStudent);
+    }
+
+    @Test
+    @DisplayName("Успешное удаление студента (204) - студент существует и не состоит в активной группе")
+    void deleteById_ShouldDeleteStudent_WhenStudentExistsAndNotInActiveGroup() {
+
+        Long studentId = 1L;
+        Student student = new Student();
+        student.setId(studentId);
+
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(studyGroupRepository.existsByStudents_IdAndStatus(eq(studentId), eq(GroupStatus.ACTIVE)))
+                .thenReturn(false);
+
+        assertDoesNotThrow(() -> studentService.deleteById(studentId));
+
+        verify(studentRepository, times(1)).findById(studentId);
+        verify(studyGroupRepository, times(1))
+                .existsByStudents_IdAndStatus(eq(studentId), eq(GroupStatus.ACTIVE));
+        verify(studentRepository, times(1)).delete(student);
+    }
+
+    @Test
+    @DisplayName("Ошибка 404 - студент не найден")
+    void deleteById_ShouldThrowResourceNotFoundException_WhenStudentNotFound() {
+
+        Long studentId = 99L;
+
+        when(studentRepository.findById(studentId)).thenReturn(Optional.empty());
+
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> studentService.deleteById(studentId)
+        );
+
+        assertEquals("Student с id 99 не найден", exception.getMessage());
+
+        verify(studentRepository, times(1)).findById(studentId);
+        verify(studyGroupRepository, never()).existsByStudents_IdAndStatus(anyLong(), any(GroupStatus.class));
+        verify(studentRepository, never()).delete(any(Student.class));
+    }
+
+    @Test
+    @DisplayName("Ошибка 409 - студент состоит в активной группе")
+    void deleteById_ShouldThrowConflictException_WhenStudentInActiveGroup() {
+
+        Long studentId = 1L;
+        Student student = new Student();
+        student.setId(studentId);
+
+        when(studentRepository.findById(studentId)).thenReturn(Optional.of(student));
+        when(studyGroupRepository.existsByStudents_IdAndStatus(eq(studentId), eq(GroupStatus.ACTIVE)))
+                .thenReturn(true);
+
+        ConflictException exception = assertThrows(
+                ConflictException.class,
+                () -> studentService.deleteById(studentId)
+        );
+
+        assertEquals(
+                "Студент с id 1 состоит в активной учебной группе и не может быть удалён",
+                exception.getMessage()
+        );
+
+        verify(studentRepository, times(1)).findById(studentId);
+        verify(studyGroupRepository, times(1))
+                .existsByStudents_IdAndStatus(eq(studentId), eq(GroupStatus.ACTIVE));
+        verify(studentRepository, never()).delete(any(Student.class));
     }
 }
